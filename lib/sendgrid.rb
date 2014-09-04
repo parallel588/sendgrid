@@ -30,7 +30,8 @@ module SendGrid
                       :default_sg_template
       end
       attr_accessor :sg_category, :sg_options, :sg_disabled_options, :sg_recipients, :sg_substitutions,
-                    :subscriptiontrack_text, :footer_text, :spamcheck_score, :sg_unique_args
+                    :subscriptiontrack_text, :footer_text, :spamcheck_score, :sg_unique_args,
+                    :sg_template
     end
 
     # NOTE: This commented-out approach may be a "safer" option for Rails 3, but it
@@ -53,7 +54,7 @@ module SendGrid
     def sendgrid_category(category)
       self.default_sg_category = category
     end
-    
+
     # Set a default template for all mails
     def sendgrid_template(template_id)
       self.default_sg_template = template_id
@@ -76,7 +77,7 @@ module SendGrid
       self.default_sg_options = Array.new unless self.default_sg_options
       options.each { |option| self.default_sg_options << option if VALID_OPTIONS.include?(option) }
     end
-    
+
     # Sets the default text for subscription tracking (must be enabled).
     # There are two options:
     # 1. Add an unsubscribe link at the bottom of the email
@@ -136,6 +137,11 @@ module SendGrid
     @sg_recipients = emails
   end
 
+  # Set a template for current mail
+  def sendgrid_template(template_id)
+    @sg_template = template_id
+  end
+
   # Call within mailer method to add an array of substitions
   # NOTE: you must ensure that the length of the substitions equals the
   #       length of the sendgrid_recipients.
@@ -165,7 +171,7 @@ module SendGrid
     @ganalytics_options = []
     options.each { |option| @ganalytics_options << option if VALID_GANALYTICS_OPTIONS.include?(option[0].to_sym) }
   end
-  
+
   # only override the appropriate methods for the current ActionMailer version
   if ActionMailer::Base.respond_to?(:mail)
 
@@ -210,7 +216,7 @@ module SendGrid
 
     #if not called within the mailer method, this will be nil so we default to empty hash
     @sg_unique_args = @sg_unique_args || {}
-    
+
     # set the unique arguments
     if @sg_unique_args || self.class.default_sg_unique_args
       unique_args = self.class.default_sg_unique_args || {}
@@ -262,6 +268,7 @@ module SendGrid
     filters = {}
     enabled_opts.each do |opt|
       filters[opt] = {'settings' => {'enable' => 1}}
+
       case opt.to_sym
         when :templates
           if self.class.default_sg_template
@@ -305,6 +312,10 @@ module SendGrid
             end
           end
       end
+    end
+
+    if @sg_template
+      filters[:templates]['settings']['template_id'] = @sg_template
     end
 
     if disabled_opts
