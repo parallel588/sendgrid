@@ -315,6 +315,7 @@ module SendGrid
     end
 
     if @sg_template
+      filters[:templates] ||= {'settings' => {'enable' => 1}}
       filters[:templates]['settings']['template_id'] = @sg_template
     end
 
