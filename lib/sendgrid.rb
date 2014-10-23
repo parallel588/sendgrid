@@ -1,6 +1,6 @@
 require 'json'
-
-module SendGrid
+module
+  SendGrid
 
   VALID_OPTIONS = [
     :opentrack,
@@ -11,7 +11,8 @@ module SendGrid
     :footer,
     :spamcheck,
     :bypass_list_management,
-    :templates
+    :templates,
+    :bcc
   ]
 
   VALID_GANALYTICS_OPTIONS = [
@@ -31,7 +32,7 @@ module SendGrid
       end
       attr_accessor :sg_category, :sg_options, :sg_disabled_options, :sg_recipients, :sg_substitutions,
                     :subscriptiontrack_text, :footer_text, :spamcheck_score, :sg_unique_args,
-                    :sg_template
+                    :sg_template, :sg_bcc
     end
 
     # NOTE: This commented-out approach may be a "safer" option for Rails 3, but it
@@ -106,6 +107,7 @@ module SendGrid
     def sendgrid_unique_args(unique_args = {})
       self.default_sg_unique_args = unique_args
     end
+
   end
 
   # Call within mailer method to override the default value.
@@ -135,6 +137,13 @@ module SendGrid
   def sendgrid_recipients(emails)
     @sg_recipients = Array.new unless @sg_recipients
     @sg_recipients = emails
+  end
+
+  def sendgrid_bcc(emails)
+    @sg_options = Array.new unless @sg_options
+    @sg_options << :bcc
+    @sg_bcc = Array.new unless @sg_bcc
+    @sg_bcc = emails
   end
 
   # Set a template for current mail
@@ -263,69 +272,70 @@ module SendGrid
 
     header_opts.to_json.gsub(/(["\]}])([,:])(["\[{])/, '\\1\\2 \\3')
   end
+end
 
-  def filters_hash_from_options(enabled_opts, disabled_opts)
-    filters = {}
-    enabled_opts.each do |opt|
-      filters[opt] = {'settings' => {'enable' => 1}}
+def filters_hash_from_options(enabled_opts, disabled_opts)
+  filters = {}
 
-      case opt.to_sym
-        when :templates
-          if self.class.default_sg_template
-            filters[:templates]['settings']['template_id'] = self.class.default_sg_template
-          end
-        when :subscriptiontrack
-          if @subscriptiontrack_text
-            if @subscriptiontrack_text[:replace]
-              filters[:subscriptiontrack]['settings']['replace'] = @subscriptiontrack_text[:replace]
-            else
-              filters[:subscriptiontrack]['settings']['text/html'] = @subscriptiontrack_text[:html]
-              filters[:subscriptiontrack]['settings']['text/plain'] = @subscriptiontrack_text[:plain]
-            end
-          elsif self.class.default_subscriptiontrack_text
-            if self.class.default_subscriptiontrack_text[:replace]
-              filters[:subscriptiontrack]['settings']['replace'] = self.class.default_subscriptiontrack_text[:replace]
-            else
-              filters[:subscriptiontrack]['settings']['text/html'] = self.class.default_subscriptiontrack_text[:html]
-              filters[:subscriptiontrack]['settings']['text/plain'] = self.class.default_subscriptiontrack_text[:plain]
-            end
-          end
+  enabled_opts.each do |opt|
+    filters[opt] = {'settings' => {'enable' => 1}}
+    case opt.to_sym
+    when :bcc
+      filters[:bcc] = { 'settings' =>  {'enable' => 1, 'email' => @sg_bcc}}
+    when :templates
+      if self.class.default_sg_template
+        filters[:templates]['settings']['template_id'] = self.class.default_sg_template
+      end
+    when :subscriptiontrack
+      if @subscriptiontrack_text
+        if @subscriptiontrack_text[:replace]
+          filters[:subscriptiontrack]['settings']['replace'] = @subscriptiontrack_text[:replace]
+        else
+          filters[:subscriptiontrack]['settings']['text/html'] = @subscriptiontrack_text[:html]
+          filters[:subscriptiontrack]['settings']['text/plain'] = @subscriptiontrack_text[:plain]
+        end
+      elsif self.class.default_subscriptiontrack_text
+        if self.class.default_subscriptiontrack_text[:replace]
+          filters[:subscriptiontrack]['settings']['replace'] = self.class.default_subscriptiontrack_text[:replace]
+        else
+          filters[:subscriptiontrack]['settings']['text/html'] = self.class.default_subscriptiontrack_text[:html]
+          filters[:subscriptiontrack]['settings']['text/plain'] = self.class.default_subscriptiontrack_text[:plain]
+        end
+      end
 
-        when :footer
-          if @footer_text
-            filters[:footer]['settings']['text/html'] = @footer_text[:html]
-            filters[:footer]['settings']['text/plain'] = @footer_text[:plain]
-          elsif self.class.default_footer_text
-            filters[:footer]['settings']['text/html'] = self.class.default_footer_text[:html]
-            filters[:footer]['settings']['text/plain'] = self.class.default_footer_text[:plain]
-          end
+    when :footer
+      if @footer_text
+        filters[:footer]['settings']['text/html'] = @footer_text[:html]
+        filters[:footer]['settings']['text/plain'] = @footer_text[:plain]
+      elsif self.class.default_footer_text
+        filters[:footer]['settings']['text/html'] = self.class.default_footer_text[:html]
+        filters[:footer]['settings']['text/plain'] = self.class.default_footer_text[:plain]
+      end
 
-        when :spamcheck
-          if self.class.default_spamcheck_score || @spamcheck_score
-            filters[:spamcheck]['settings']['maxscore'] = @spamcheck_score || self.class.default_spamcheck_score
-          end
+    when :spamcheck
+      if self.class.default_spamcheck_score || @spamcheck_score
+        filters[:spamcheck]['settings']['maxscore'] = @spamcheck_score || self.class.default_spamcheck_score
+      end
 
-        when :ganalytics
-          if @ganalytics_options
-            @ganalytics_options.each do |key, value|
-              filters[:ganalytics]['settings'][key.to_s] = value
-            end
-          end
+    when :ganalytics
+      if @ganalytics_options
+        @ganalytics_options.each do |key, value|
+          filters[:ganalytics]['settings'][key.to_s] = value
+        end
       end
     end
-
-    if @sg_template
-      filters[:templates] ||= {'settings' => {'enable' => 1}}
-      filters[:templates]['settings']['template_id'] = @sg_template
-    end
-
-    if disabled_opts
-      disabled_opts.each do |opt|
-        filters[opt] = {'settings' => {'enable' => 0}}
-      end
-    end
-
-    return filters
   end
 
+  if @sg_template
+    filters[:templates] ||= {'settings' => {'enable' => 1}}
+    filters[:templates]['settings']['template_id'] = @sg_template
+  end
+
+  if disabled_opts
+    disabled_opts.each do |opt|
+      filters[opt] = {'settings' => {'enable' => 0}}
+    end
+  end
+
+  return filters
 end
